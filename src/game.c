@@ -2,24 +2,30 @@
 
 #include <stdlib.h>
 
-static size_t cell_index(int row, int column) {
+static size_t cell_index(int row, int column)
+{
     return (size_t)row * SUDOKU_SIZE + (size_t)column;
 }
 
-static unsigned char *create_fixed_map(const SudokuBoard *puzzle) {
+static unsigned char *create_fixed_map(const SudokuBoard *puzzle)
+{
     unsigned char *fixed;
 
-    if (puzzle == NULL || puzzle->cells == NULL) {
+    if (puzzle == NULL || puzzle->cells == NULL)
+    {
         return NULL;
     }
 
     fixed = calloc(SUDOKU_CELL_COUNT, sizeof(*fixed));
-    if (fixed == NULL) {
+    if (fixed == NULL)
+    {
         return NULL;
     }
 
-    for (int row = 0; row < SUDOKU_SIZE; row++) {
-        for (int column = 0; column < SUDOKU_SIZE; column++) {
+    for (int row = 0; row < SUDOKU_SIZE; row++)
+    {
+        for (int column = 0; column < SUDOKU_SIZE; column++)
+        {
             const int *cell = board_cell_const(puzzle, row, column);
             fixed[cell_index(row, column)] =
                 (unsigned char)(cell != NULL && *cell != SUDOKU_EMPTY);
@@ -29,30 +35,81 @@ static unsigned char *create_fixed_map(const SudokuBoard *puzzle) {
     return fixed;
 }
 
-SudokuGame *game_create(void) {
-    /* STUDENT TODO 5: Construct an empty game object. */
-    return NULL;
+SudokuGame *game_create(void)
+{
+    SudokuGame *game = (SudokuGame *)calloc(1, sizeof(*game));
+    if (game == NULL)
+    {
+        return NULL;
+    }
+    return game;
 }
 
-void game_destroy(SudokuGame **game_ptr) {
-    /* STUDENT TODO 5: Release every allocation owned by the game. */
-    (void)game_ptr;
+void game_destroy(SudokuGame **game_ptr)
+{
+    if (game_ptr == NULL || *game_ptr == NULL)
+    {
+        return;
+    }
+    free((*game_ptr)->fixed);
+    (*game_ptr)->fixed = NULL;
+    board_destroy(&(*game_ptr)->solution);
+    free((*game_ptr)->solution);
+    (*game_ptr)->solution = NULL;
+    board_destroy(&(*game_ptr)->puzzle);
+    free((*game_ptr)->puzzle);
+    (*game_ptr)->puzzle = NULL;
+    history_destroy(&(*game_ptr)->history);
+
+    free(*game_ptr);
+    *game_ptr = NULL;
 }
 
-int game_start_new(SudokuGame *game, Difficulty difficulty) {
-    /*
-     * STUDENT TODO 6: Replace the current game with a newly generated one.
-     * A failed replacement must leave an existing game unchanged.
-     */
-    (void)game;
-    (void)difficulty;
-    (void)create_fixed_map;
-    return 0;
+int game_start_new(SudokuGame *game, Difficulty difficulty)
+{
+    if (game == NULL)
+    {
+        return 0;
+    }
+    SudokuBoard *solution = (*game).solution;
+    SudokuBoard *puzzle = (*game).puzzle;
+    unsigned char *fixed = (*game).fixed;
+    Difficulty diffic = (*game).difficulty;
+    int active = (*game).active;
+    (*game).active = 1;
+    (*game).difficulty = difficulty;
+    (*game).solution = sudoku_generate_solution();
+    (*game).puzzle = sudoku_generate_puzzle((*game).solution, difficulty, NULL);
+    (*game).fixed = create_fixed_map((*game).puzzle);
+    if (game == NULL || (*game).solution == NULL || (*game).puzzle == NULL || (*game).fixed == NULL || (*game).active != 1 || (*game).difficulty != difficulty)
+    {
+        board_destroy(&(*game).puzzle);
+        free((*game).puzzle);
+        board_destroy(&(*game).solution);
+        free((*game).solution);
+        free((*game).fixed);
+        (*game).solution = solution;
+        (*game).puzzle = puzzle;
+        (*game).fixed = fixed;
+        (*game).difficulty = diffic;
+        (*game).active = active;
+        return 0;
+    }
+    board_destroy(&puzzle);
+    free(puzzle);
+    board_destroy(&solution);
+    free(solution);
+    free(fixed);
+    free((&game->history)->items);
+    history_init(&game->history);
+    return 1;
 }
 
-int game_cell_is_fixed(const SudokuGame *game, int row, int column) {
+int game_cell_is_fixed(const SudokuGame *game, int row, int column)
+{
     if (game == NULL || game->fixed == NULL ||
-        !board_coordinates_in_range(row, column)) {
+        !board_coordinates_in_range(row, column))
+    {
         return 0;
     }
 
@@ -63,7 +120,8 @@ static int record_move(SudokuGame *game,
                        int row,
                        int column,
                        int previous_value,
-                       int new_value) {
+                       int new_value)
+{
     Move move;
 
     move.row = row;
@@ -73,31 +131,37 @@ static int record_move(SudokuGame *game,
     return history_push(&game->history, move);
 }
 
-MoveResult game_place_value(SudokuGame *game, int row, int column, int value) {
+MoveResult game_place_value(SudokuGame *game, int row, int column, int value)
+{
     int *cell;
     int old_value;
 
-    if (game == NULL || !game->active) {
+    if (game == NULL || !game->active)
+    {
         return MOVE_NO_ACTIVE_GAME;
     }
 
-    if (!board_coordinates_in_range(row, column) || value < 1 || value > 9) {
+    if (!board_coordinates_in_range(row, column) || value < 1 || value > 9)
+    {
         return MOVE_OUT_OF_RANGE;
     }
 
-    if (game_cell_is_fixed(game, row, column)) {
+    if (game_cell_is_fixed(game, row, column))
+    {
         return MOVE_FIXED_CELL;
     }
 
     cell = board_cell(game->puzzle, row, column);
-    if (cell == NULL) {
+    if (cell == NULL)
+    {
         return MOVE_OUT_OF_RANGE;
     }
 
     old_value = *cell;
     *cell = SUDOKU_EMPTY;
 
-    if (!sudoku_is_value_valid(game->puzzle, row, column, value)) {
+    if (!sudoku_is_value_valid(game->puzzle, row, column, value))
+    {
         *cell = old_value;
         return MOVE_INVALID_PLACEMENT;
     }
@@ -105,7 +169,8 @@ MoveResult game_place_value(SudokuGame *game, int row, int column, int value) {
     *cell = value;
 
     if (old_value != value &&
-        !record_move(game, row, column, old_value, value)) {
+        !record_move(game, row, column, old_value, value))
+    {
         *cell = old_value;
         return MOVE_MEMORY_ERROR;
     }
@@ -113,34 +178,41 @@ MoveResult game_place_value(SudokuGame *game, int row, int column, int value) {
     return MOVE_OK;
 }
 
-MoveResult game_clear_value(SudokuGame *game, int row, int column) {
+MoveResult game_clear_value(SudokuGame *game, int row, int column)
+{
     int *cell;
     int old_value;
 
-    if (game == NULL || !game->active) {
+    if (game == NULL || !game->active)
+    {
         return MOVE_NO_ACTIVE_GAME;
     }
 
-    if (!board_coordinates_in_range(row, column)) {
+    if (!board_coordinates_in_range(row, column))
+    {
         return MOVE_OUT_OF_RANGE;
     }
 
-    if (game_cell_is_fixed(game, row, column)) {
+    if (game_cell_is_fixed(game, row, column))
+    {
         return MOVE_FIXED_CELL;
     }
 
     cell = board_cell(game->puzzle, row, column);
-    if (cell == NULL) {
+    if (cell == NULL)
+    {
         return MOVE_OUT_OF_RANGE;
     }
 
     old_value = *cell;
-    if (old_value == SUDOKU_EMPTY) {
+    if (old_value == SUDOKU_EMPTY)
+    {
         return MOVE_OK;
     }
 
     *cell = SUDOKU_EMPTY;
-    if (!record_move(game, row, column, old_value, SUDOKU_EMPTY)) {
+    if (!record_move(game, row, column, old_value, SUDOKU_EMPTY))
+    {
         *cell = old_value;
         return MOVE_MEMORY_ERROR;
     }
@@ -148,20 +220,24 @@ MoveResult game_clear_value(SudokuGame *game, int row, int column) {
     return MOVE_OK;
 }
 
-MoveResult game_undo(SudokuGame *game) {
+MoveResult game_undo(SudokuGame *game)
+{
     Move last_move;
     int *cell;
 
-    if (game == NULL || !game->active) {
+    if (game == NULL || !game->active)
+    {
         return MOVE_NO_ACTIVE_GAME;
     }
 
-    if (!history_pop(&game->history, &last_move)) {
+    if (!history_pop(&game->history, &last_move))
+    {
         return MOVE_NOTHING_TO_UNDO;
     }
 
     cell = board_cell(game->puzzle, last_move.row, last_move.column);
-    if (cell == NULL) {
+    if (cell == NULL)
+    {
         return MOVE_OUT_OF_RANGE;
     }
 
@@ -169,8 +245,10 @@ MoveResult game_undo(SudokuGame *game) {
     return MOVE_OK;
 }
 
-int game_has_won(const SudokuGame *game) {
-    if (game == NULL || !game->active) {
+int game_has_won(const SudokuGame *game)
+{
+    if (game == NULL || !game->active)
+    {
         return 0;
     }
 
@@ -179,31 +257,39 @@ int game_has_won(const SudokuGame *game) {
            board_equal(game->puzzle, game->solution);
 }
 
-static void print_board(const SudokuBoard *board, FILE *output) {
+static void print_board(const SudokuBoard *board, FILE *output)
+{
     fprintf(output, "      1 2 3   4 5 6   7 8 9\n");
     fprintf(output, "    +-------+-------+-------+\n");
 
-    for (int row = 0; row < SUDOKU_SIZE; row++) {
+    for (int row = 0; row < SUDOKU_SIZE; row++)
+    {
         fprintf(output, " %d  |", row + 1);
 
-        for (int column = 0; column < SUDOKU_SIZE; column++) {
+        for (int column = 0; column < SUDOKU_SIZE; column++)
+        {
             const int *cell = board_cell_const(board, row, column);
             int value = cell == NULL ? SUDOKU_EMPTY : *cell;
 
-            if (value == SUDOKU_EMPTY) {
+            if (value == SUDOKU_EMPTY)
+            {
                 fprintf(output, " .");
-            } else {
+            }
+            else
+            {
                 fprintf(output, " %d", value);
             }
 
-            if ((column + 1) % SUDOKU_BOX_SIZE == 0) {
+            if ((column + 1) % SUDOKU_BOX_SIZE == 0)
+            {
                 fprintf(output, " |");
             }
         }
 
         fprintf(output, "\n");
 
-        if ((row + 1) % SUDOKU_BOX_SIZE == 0) {
+        if ((row + 1) % SUDOKU_BOX_SIZE == 0)
+        {
             fprintf(output, "    +-------+-------+-------+\n");
         }
     }
@@ -211,12 +297,15 @@ static void print_board(const SudokuBoard *board, FILE *output) {
     fprintf(output, "\n");
 }
 
-void game_print_to(const SudokuGame *game, FILE *output) {
-    if (output == NULL) {
+void game_print_to(const SudokuGame *game, FILE *output)
+{
+    if (output == NULL)
+    {
         return;
     }
 
-    if (game == NULL || !game->active) {
+    if (game == NULL || !game->active)
+    {
         fprintf(output, "No active game. Enter 'new game' to begin.\n");
         return;
     }
@@ -226,12 +315,15 @@ void game_print_to(const SudokuGame *game, FILE *output) {
     print_board(game->puzzle, output);
 }
 
-void game_print_solution_to(const SudokuGame *game, FILE *output) {
-    if (output == NULL) {
+void game_print_solution_to(const SudokuGame *game, FILE *output)
+{
+    if (output == NULL)
+    {
         return;
     }
 
-    if (game == NULL || !game->active) {
+    if (game == NULL || !game->active)
+    {
         fprintf(output, "No active game. Enter 'new game' to begin.\n");
         return;
     }
@@ -240,31 +332,35 @@ void game_print_solution_to(const SudokuGame *game, FILE *output) {
     print_board(game->solution, output);
 }
 
-void game_print(const SudokuGame *game) {
+void game_print(const SudokuGame *game)
+{
     game_print_to(game, stdout);
 }
 
-void game_print_solution(const SudokuGame *game) {
+void game_print_solution(const SudokuGame *game)
+{
     game_print_solution_to(game, stdout);
 }
 
-const char *game_move_result_message(MoveResult result) {
-    switch (result) {
-        case MOVE_OK:
-            return "Move accepted.";
-        case MOVE_NO_ACTIVE_GAME:
-            return "No active game. Enter 'new game' first.";
-        case MOVE_OUT_OF_RANGE:
-            return "Invalid input: rows, columns, and values must be integers from 1 to 9.";
-        case MOVE_FIXED_CELL:
-            return "That cell is part of the original puzzle and cannot be changed.";
-        case MOVE_INVALID_PLACEMENT:
-            return "Invalid int placement: that value conflicts with its row, column, or 3x3 box.";
-        case MOVE_NOTHING_TO_UNDO:
-            return "Nothing to undo.";
-        case MOVE_MEMORY_ERROR:
-            return "Move failed: the program could not grow the move-history array.";
-        default:
-            return "Unknown move result.";
+const char *game_move_result_message(MoveResult result)
+{
+    switch (result)
+    {
+    case MOVE_OK:
+        return "Move accepted.";
+    case MOVE_NO_ACTIVE_GAME:
+        return "No active game. Enter 'new game' first.";
+    case MOVE_OUT_OF_RANGE:
+        return "Invalid input: rows, columns, and values must be integers from 1 to 9.";
+    case MOVE_FIXED_CELL:
+        return "That cell is part of the original puzzle and cannot be changed.";
+    case MOVE_INVALID_PLACEMENT:
+        return "Invalid int placement: that value conflicts with its row, column, or 3x3 box.";
+    case MOVE_NOTHING_TO_UNDO:
+        return "Nothing to undo.";
+    case MOVE_MEMORY_ERROR:
+        return "Move failed: the program could not grow the move-history array.";
+    default:
+        return "Unknown move result.";
     }
 }
